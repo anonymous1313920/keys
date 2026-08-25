@@ -1,21 +1,17 @@
-# Build phase
-FROM golang:1.22-alpine AS builder
+FROM golang:alpine AS builder
 WORKDIR /app
 
-# Copy module files first
-COPY go.mod ./
-COPY go.sum* ./
-
-# Download dependencies (or generate missing locks)
+# Copy dependency files first
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code and compile
+# Copy application source code
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
-# Run phase
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/main .
 EXPOSE 8080
+
 CMD ["./main"]
