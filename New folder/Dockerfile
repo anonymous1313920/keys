@@ -4,18 +4,20 @@ WORKDIR /app
 
 RUN apk add --no-cache git
 
-# Copy dependency files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy source code
+# Copy source files
 COPY . .
 
-# Build binary
+# Force-create modules inside the build container
+RUN rm -f go.mod go.sum
+RUN go mod init myapp
+RUN go get github.com/joho/godotenv
+RUN go get github.com/lib/pq
+RUN go mod tidy
+
+# Build the executable
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
+# Production Stage
 FROM alpine:latest
 WORKDIR /app
 RUN apk add --no-cache ca-certificates

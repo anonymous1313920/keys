@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: keygen-admin-panel
+    env: go
+    buildCommand: go build -o main main.go
+    startCommand: ./main
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        sync: false
