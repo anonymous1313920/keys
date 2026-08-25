@@ -1,8 +1,15 @@
 # Build phase
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
-COPY go.mod go.sum ./
+
+# Copy module files first
+COPY go.mod ./
+COPY go.sum* ./
+
+# Download dependencies (or generate missing locks)
 RUN go mod download
+
+# Copy source code and compile
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
