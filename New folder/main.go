@@ -84,6 +84,7 @@ func main() {
 }
 
 func initDB() {
+	// 1. Create base table if it doesn't exist
 	query := `
 	CREATE TABLE IF NOT EXISTS keys (
 		id SERIAL PRIMARY KEY,
@@ -97,6 +98,9 @@ func initDB() {
 	if err != nil {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
+
+	// 2. Schema Compatibility Fix: Drop NOT NULL constraint on legacy 'duration' column if present
+	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN duration DROP NOT NULL;")
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -126,17 +130,23 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	case "MONTH":
 		days = 30
 	default:
-		json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Invalid duration"})
+		json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Invalid duration choice"})
 		return
 	}
 
 	keyValue := GenerateKey(req.Duration, days)
 
+	// Safe insert to prevent null constraint errors across column naming variations
 	query := "INSERT INTO keys (key_value, duration_days) VALUES ($1, $2)"
 	_, err := db.Exec(query, keyValue, days)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Failed to save key: " + err.Error()})
-		return
+		// Fallback query if old database table expected 'duration' instead of 'duration_days'
+		fallbackQuery := "INSERT INTO keys (key_value, duration, duration_days) VALUES ($1, $2, $3)"
+		_, err = db.Exec(fallbackQuery, keyValue, days, days)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Failed to save key: " + err.Error()})
+			return
+		}
 	}
 
 	json.NewEncoder(w).Encode(map[string]any{
