@@ -99,7 +99,6 @@ func initDB() {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
 
-	// Fix constraints on legacy tables if they exist
 	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN duration DROP NOT NULL;")
 	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;")
 }
@@ -137,11 +136,9 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	keyValue := GenerateKey(req.Duration, days)
 
-	// Primary Insert: explicitly setting created_at to NOW()
 	query := "INSERT INTO keys (key_value, duration_days, created_at) VALUES ($1, $2, NOW())"
 	_, err := db.Exec(query, keyValue, days)
 	if err != nil {
-		// Fallback query for older tables expecting both 'duration' and 'duration_days'
 		fallbackQuery := "INSERT INTO keys (key_value, duration, duration_days, created_at) VALUES ($1, $2, $3, NOW())"
 		_, err = db.Exec(fallbackQuery, keyValue, days, days)
 		if err != nil {
@@ -364,4 +361,4 @@ const indexHTML = `<!DOCTYPE html>
         loadKeys();
     </script>
 </body>
-</html>
+</html>`
