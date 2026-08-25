@@ -84,7 +84,6 @@ func main() {
 }
 
 func initDB() {
-	// 1. Create base table if it doesn't exist
 	query := `
 	CREATE TABLE IF NOT EXISTS keys (
 		id SERIAL PRIMARY KEY,
@@ -92,15 +91,17 @@ func initDB() {
 		duration_days INT NOT NULL DEFAULT 1,
 		is_revoked BOOLEAN DEFAULT FALSE,
 		hwid VARCHAR(255) DEFAULT NULL,
-		activated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+		activated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err := db.Exec(query)
 	if err != nil {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
 
-	// 2. Schema Compatibility Fix: Drop NOT NULL constraint on legacy 'duration' column if present
+	// Fix constraints on legacy tables if they exist
 	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN duration DROP NOT NULL;")
+	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;")
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -136,12 +137,12 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	keyValue := GenerateKey(req.Duration, days)
 
-	// Safe insert to prevent null constraint errors across column naming variations
-	query := "INSERT INTO keys (key_value, duration_days) VALUES ($1, $2)"
+	// Primary Insert: explicitly setting created_at to NOW()
+	query := "INSERT INTO keys (key_value, duration_days, created_at) VALUES ($1, $2, NOW())"
 	_, err := db.Exec(query, keyValue, days)
 	if err != nil {
-		// Fallback query if old database table expected 'duration' instead of 'duration_days'
-		fallbackQuery := "INSERT INTO keys (key_value, duration, duration_days) VALUES ($1, $2, $3)"
+		// Fallback query for older tables expecting both 'duration' and 'duration_days'
+		fallbackQuery := "INSERT INTO keys (key_value, duration, duration_days, created_at) VALUES ($1, $2, $3, NOW())"
 		_, err = db.Exec(fallbackQuery, keyValue, days, days)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Failed to save key: " + err.Error()})
@@ -364,4 +365,3 @@ const indexHTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>
-`
