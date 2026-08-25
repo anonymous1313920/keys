@@ -92,15 +92,18 @@ func initDB() {
 		is_revoked BOOLEAN DEFAULT FALSE,
 		hwid VARCHAR(255) DEFAULT NULL,
 		activated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		expires_at TIMESTAMP WITH TIME ZONE
 	);`
 	_, err := db.Exec(query)
 	if err != nil {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
 
+	// Schema alignment fallbacks for existing tables
 	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN duration DROP NOT NULL;")
 	_, _ = db.Exec("ALTER TABLE keys ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;")
+	_, _ = db.Exec("ALTER TABLE keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;")
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -136,15 +139,15 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	keyValue := GenerateKey(req.Duration, days)
 
-	query := "INSERT INTO keys (key_value, duration_days, created_at) VALUES ($1, $2, NOW())"
-	_, err := db.Exec(query, keyValue, days)
+	// Inserts into PostgreSQL including calculated expires_at column
+	query := `
+		INSERT INTO keys (key_value, duration_days, created_at, expires_at) 
+		VALUES ($1, $2, NOW(), NOW() + ($3 || ' days')::INTERVAL)
+	`
+	_, err := db.Exec(query, keyValue, days, days)
 	if err != nil {
-		fallbackQuery := "INSERT INTO keys (key_value, duration, duration_days, created_at) VALUES ($1, $2, $3, NOW())"
-		_, err = db.Exec(fallbackQuery, keyValue, days, days)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Failed to save key: " + err.Error()})
-			return
-		}
+		json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Failed to save key: " + err.Error()})
+		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]any{
