@@ -233,6 +233,10 @@ const indexHTML = `<!DOCTYPE html>
     </nav>
 
     <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-10 space-y-8">
+        <div id="errorAlert" class="hidden bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-xl text-sm">
+            <span id="errorText"></span>
+        </div>
+
         <section class="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl max-w-xl">
             <h2 class="text-xl font-bold mb-1 flex items-center gap-2"><span>⚡</span> Generate Key</h2>
             <p class="text-slate-400 text-sm mb-6">Create keys and persist directly to Cloud Database.</p>
@@ -279,12 +283,28 @@ const indexHTML = `<!DOCTYPE html>
         }
 
         async function generateKey() {
-            await fetch('/api/generate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ duration: selectedDuration })
-            });
-            await loadKeys();
+            const alertBox = document.getElementById('errorAlert');
+            alertBox.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ duration: selectedDuration })
+                });
+
+                const data = await res.json();
+                if(!data.success) {
+                    document.getElementById('errorText').innerText = data.error || 'Failed to generate key';
+                    alertBox.classList.remove('hidden');
+                    return;
+                }
+
+                await loadKeys();
+            } catch(err) {
+                document.getElementById('errorText').innerText = 'Network error connecting to backend';
+                alertBox.classList.remove('hidden');
+            }
         }
 
         async function loadKeys() {
